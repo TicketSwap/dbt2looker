@@ -201,7 +201,7 @@ def map_adapter_type_to_looker(
     normalised_column_type = (
         normalise_spark_types(column_type)
         if adapter_type == models.SupportedDbtAdapters.spark.value
-        else re.sub(r"\(\d+\)", "", column_type)
+        else re.sub(r"\([,\d]+\)", "", column_type)
     ).upper()
     looker_type = LOOKER_DTYPE_MAP[adapter_type].get(normalised_column_type)
     if (column_type is not None) and (looker_type is None):
