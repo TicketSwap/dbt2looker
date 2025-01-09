@@ -1,7 +1,0 @@
-version: 2
-
-sources:
-  - name: landing_page
-    schema: landing_page
-    tables:
-      - name: pages

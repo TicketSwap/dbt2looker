@@ -1,14 +1,22 @@
+from __future__ import annotations
+
 from enum import Enum
-from typing import Any, Union, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 try:
     from typing import Literal
 except ImportError:
     from typing_extensions import Literal
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 
 # dbt2looker utility types
+class UnsupportedLookerDimensionTypeError(ValueError):
+    def __init__(self, wrong_value: str):
+        msg = f"{wrong_value} is not a supported looker dimension type"
+        super().__init__(msg)
+
+
 class UnsupportedDbtAdapterError(ValueError):
     def __init__(self, wrong_value: str):
         msg = f"{wrong_value} is not a supported dbt adapter"
@@ -40,6 +48,28 @@ class LookerMeasureType(str, Enum):
     # percentile_distinct = 'percentile_distinct'
     sum = "sum"
     sum_distinct = "sum_distinct"
+
+
+class LookerDimensionType(str, Enum):
+    bin = "bin"
+    date = "date"
+    date_time = "date_time"
+    distance = "distance"
+    duration = "duration"
+    location = "location"
+    number = "number"
+    string = "string"
+    time = "time"
+    unqoted = "unquoted"
+    yesno = "yesno"
+    zipcode = "zipcode"
+
+
+class LookerParameterType(str, Enum):
+    string = "string"
+    yesno = "yesno"
+    unquoted = "unquoted"
+    date_time = "date_time"
 
 
 class LookerJoinType(str, Enum):
@@ -76,46 +106,99 @@ class LookerValueFormatName(str, Enum):
     percent_4 = "percent_4"
 
 
-class LookerHiddenType(str, Enum):
+class LookerBooleanType(str, Enum):
     yes = "yes"
     no = "no"
 
 
-class Dbt2LookerMeasure(BaseModel):
-    type: LookerMeasureType
-    filters: Optional[List[Dict[str, str]]] = []
-    description: Optional[str] = None
-    sql: Optional[str] = None
-    value_format_name: Optional[LookerValueFormatName] = None
-    group_label: Optional[str] = None
-    label: Optional[str] = None
-    hidden: Optional[LookerHiddenType] = None
+class LookerParameterAllowedValue(BaseModel):
+    value: str
+    label: str
 
-    @validator("filters")
+
+class LookerLinkType(BaseModel):
+    label: str
+    url: str
+    icon_url: str | None = None
+
+
+class Dbt2LookerBaseField(BaseModel):
+    enabled: bool = True
+    group_item_label: str | None = None
+    group_label: str | None = None
+    hidden: LookerBooleanType | None = None
+    html: str | None = None
+    label: str | None = None
+    links: list[LookerLinkType] | None = None
+    required_access_grants: list[str] | None = None
+    required_fields: list[str] | None = None
+    suggestable: LookerBooleanType | None = None
+    suggestions: list[str] | None = None
+    tags: list[str] | None = None
+    value_format: str | None = None
+    value_format_name: LookerValueFormatName | None = None
+    view_label: str | None = None
+
+
+class Dbt2LookerMeasure(Dbt2LookerBaseField):
+    description: str
+    drill_fields: list[str] | None = None
+    filters: list[dict[str, str]] | None = []
+    sql: str | None = None
+    sql_distinct_key: str | None = None
+    type: LookerMeasureType
+
+    @field_validator("filters")
     def filters_are_singular_dicts(cls, v: List[Dict[str, str]]):
         if v is not None:
             for f in v:
                 if len(f) != 1:
                     raise ValueError(
-                        "Multiple filter names provided for a single filter in measure block"
+                        "Multiple filter names provided for a single filter in measure block",
                     )
         return v
 
 
-class Dbt2LookerDimension(BaseModel):
-    enabled: Optional[bool] = True
-    name: Optional[str] = None
-    sql: Optional[str] = None
-    description: Optional[str] = None
-    value_format_name: Optional[LookerValueFormatName] = None
+class Dbt2LookerBaseDimension(Dbt2LookerBaseField):
+    case_sensitive: LookerBooleanType | None = None
+    convert_tz: LookerBooleanType | None = None
+    intervals: list[str] | None = None
+    map_layer_name: str | None = None
+    primary_key: LookerBooleanType | None = None
+    sql_end: str | None = None
+    sql_latitude: str | None = None
+    sql_longitude: str | None = None
+    sql_start: str | None = None
+    timeframes: list[str] | None = None
+
+
+class Dbt2LookerCustomDimension(Dbt2LookerBaseDimension):
+    sql: str
+    description: str
+    type: LookerDimensionType = LookerDimensionType.string
+
+
+class Dbt2LookerDimension(Dbt2LookerBaseDimension):
+    name: str | None = None
+    sql: str | None = None
+    description: str | None = None
+
+
+class Dbt2LookerParameter(BaseModel):
+    label: str
+    description: str
+    type: LookerParameterType
+    group_label: str | None = None
+    default_value: str | None = None
+    allowed_values: list[LookerParameterAllowedValue] | None = None
 
 
 class Dbt2LookerMeta(BaseModel):
-    measures: Optional[Dict[str, Dbt2LookerMeasure]] = {}
-    measure: Optional[Dict[str, Dbt2LookerMeasure]] = {}
-    metrics: Optional[Dict[str, Dbt2LookerMeasure]] = {}
-    metric: Optional[Dict[str, Dbt2LookerMeasure]] = {}
-    dimension: Optional[Dbt2LookerDimension] = Dbt2LookerDimension()
+    measures: dict[str, Dbt2LookerMeasure] | None = {}
+    measure: dict[str, Dbt2LookerMeasure] | None = {}
+    metrics: dict[str, Dbt2LookerMeasure] | None = {}
+    metric: dict[str, Dbt2LookerMeasure] | None = {}
+    dimension: Dbt2LookerDimension | None = Dbt2LookerDimension()
 
 
 # Looker file types
@@ -141,25 +224,28 @@ class DbtModelColumnMeta(Dbt2LookerMeta):
 class DbtModelColumn(BaseModel):
     name: str
     description: str
-    data_type: Optional[str] = None
+    data_type: str | None = None
     meta: DbtModelColumnMeta
 
 
 class DbtNode(BaseModel):
     unique_id: str
     resource_type: str
-    config: Dict[str, Any]
+    config: dict[str, Any]
 
 
 class Dbt2LookerExploreJoin(BaseModel):
     join: str
-    type: Optional[LookerJoinType] = LookerJoinType.left_outer
-    relationship: Optional[LookerJoinRelationship] = LookerJoinRelationship.many_to_one
+    type: LookerJoinType | None = LookerJoinType.left_outer
+    relationship: LookerJoinRelationship | None = LookerJoinRelationship.many_to_one
     sql_on: str
 
 
 class Dbt2LookerModelMeta(BaseModel):
-    joins: Optional[List[Dbt2LookerExploreJoin]] = []
+    add_explore: bool = False
+    dimensions: dict[str, Dbt2LookerCustomDimension] | None = {}
+    parameters: dict[str, Dbt2LookerParameter] | None = {}
+    joins: list[Dbt2LookerExploreJoin] | None = []
 
 
 class DbtModelMeta(Dbt2LookerModelMeta):
@@ -172,22 +258,19 @@ class DbtModel(DbtNode):
     db_schema: str = Field(..., alias="schema")
     name: str
     description: str
-    columns: Dict[str, DbtModelColumn]
-    tags: List[str]
+    columns: dict[str, DbtModelColumn]
+    tags: list[str]
     meta: DbtModelMeta
 
-    @validator("columns")
+    @field_validator("columns")
     def case_insensitive_column_names(cls, v: Dict[str, DbtModelColumn]):
-        return {
-            name.lower(): column.copy(update={"name": column.name.lower()})
-            for name, column in v.items()
-        }
+        return {name.lower(): column.model_copy(update={"name": column.name.lower()}) for name, column in v.items()}
 
 
 class DbtManifestMetadata(BaseModel):
     adapter_type: str
 
-    @validator("adapter_type")
+    @field_validator("adapter_type")
     def adapter_must_be_supported(cls, v):
         try:
             SupportedDbtAdapters(v)
@@ -220,12 +303,9 @@ class DbtCatalogNode(BaseModel):
     metadata: DbtCatalogNodeMetadata
     columns: Dict[str, DbtCatalogNodeColumn]
 
-    @validator("columns")
+    @field_validator("columns")
     def case_insensitive_column_names(cls, v: Dict[str, DbtCatalogNodeColumn]):
-        return {
-            name.lower(): column.copy(update={"name": column.name.lower()})
-            for name, column in v.items()
-        }
+        return {name.lower(): column.copy(update={"name": column.name.lower()}) for name, column in v.items()}
 
 
 class DbtCatalog(BaseModel):

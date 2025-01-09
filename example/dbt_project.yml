@@ -1,35 +1,126 @@
-
-# Name your project! Project names should contain only lowercase characters
-# and underscores. A good package name should reflect your organization's
-# name or the intended use of these models
-name: 'hubble_analytics'
+name: 'data_transformations'
 version: '1.0.0'
 config-version: 2
 
-# This setting configures which "profile" dbt uses for this project.
-profile: 'hubble_analytics'
+profile: 'data_transformations'
 
 # These configurations specify where dbt should look for different types of files.
-# The `source-paths` config, for example, states that models in this project can be
+# The `model-paths` config, for example, states that models in this project can be
 # found in the "models/" directory. You probably won't need to change these!
-source-paths: ["models"]
-analysis-paths: ["analysis"]
+model-paths: ["models"]
+analysis-paths: ["analyses"]
 test-paths: ["tests"]
-data-paths: ["data"]
+seed-paths: ["seeds"]
 macro-paths: ["macros"]
 snapshot-paths: ["snapshots"]
 
 target-path: "target"  # directory which will store compiled SQL files
 clean-targets:         # directories to be removed by `dbt clean`
-    - "target"
-    - "dbt_modules"
+  - "target"
+  - "dbt_packages"
 
-# Tags
+seeds:
+  +schema: "{{ 'seeds' if target.name == 'prod' else none }}"
+  dbt_project_evaluator:
+    dbt_project_evaluator_exceptions:
+      +enabled: false
+
 models:
-  hubble_analytics:
-    prod:
-      +tags:
-        - "prod"
-      +persist_docs:
-        relation: true
-        columns: true
+  data_transformations:
+    +dbt-osmosis: "{model}.yml"
+    +on_schema_change: "sync_all_columns"
+    +bind: false
+    +incremental_strategy: "merge"
+    +grants:
+      select: ['role analyst']
+
+    staging:
+      +materialized: view
+      +schema: "{{ 'staging' if target.name == 'prod' else none }}"
+
+    intermediate:
+      +materialized: view
+      +schema: "{{ 'intermediate' if target.name == 'prod' else none }}"
+      machine_learning:
+        +materialized: "{{ 'ephemeral' if target.type == 'mysql' else 'table' }}"
+
+    bridge:
+      +materialized: table
+      +schema: "{{ 'bridge' if target.name == 'prod' else none }}"
+      +grants:
+        select: ['looker']
+
+    marts:
+      +materialized: table
+      +schema: "{{ 'marts' if target.name == 'prod' else none }}"
+      +grants:
+        select: ['looker']
+      marketing:
+        dim_user_conversions:
+          +sort: pk_dim_user_conversions
+          +dist: pk_dim_user_conversions
+
+    datasets:
+      +materialized: table
+      +schema: "{{ 'datasets' if target.name == 'prod' else none }}"
+      +post-hook: "{{ unload_dataset() }}"
+
+    derived:
+      +materialized: table
+      +schema: "{{ 'derived' if target.name == 'prod' else none }}"
+  
+  dbt_project_evaluator:
+    +enabled: "{{ env_var('ENABLE_DBT_PROJECT_EVALUATOR_TESTS', 'false') == 'true' }}"
+
+    marts:
+      tests:
+        fct_sources_without_freshness:
+          +enabled: false
+
+      documentation:
+        fct_undocumented_source_tables:
+          +enabled: false
+        fct_undocumented_sources:
+          +enabled: false
+
+      dag:
+        fct_model_fanout:
+          +enabled: false
+        fct_too_many_joins:
+          +enabled: false
+        fct_rejoining_of_upstream_concepts:
+          +enabled: false
+
+snapshots:
+  data_transformations:
+    +target_schema: "{{ 'dbt_snapshots' if target.name == 'prod' else none }}"
+
+data_tests:
+  +severity: "{{ env_var('DBT_TEST_SEVERITY', 'warn') }}"
+
+  dbt_project_evaluator:
+    +store_failures: true
+    +schema: "{{ 'audit' if target.name == 'prod' else none }}"
+
+  data_transformations:
+    dbt_project_evaluator:
+      +store_failures: true
+      +schema: "{{ 'audit' if target.name == 'prod' else none }}"
+
+on-run-end: "{{ update_dbt_runs() }} {{ grant_permissions() }}"
+
+vars:
+  user_conversions:
+    - "bought"
+    - "bought primary"
+    - "listed (sold)"
+    - "listed (unsold)"
+    - "new user"
+    - "wanted"
+  dbt_project_evaluator:
+    test_coverage_target: 95
+    primary_key_test_macros: [["dbt.test_unique", "dbt.test_not_null"], ["dbt_utils.test_unique_combination_of_columns"], ["data_transformations.test_fact_unique"]]
+
+dispatch:
+  - macro_namespace: dbt
+    search_order: ['data_transformations', 'dbt_project_evaluator', 'dbt']

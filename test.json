@@ -1,0 +1,46 @@
+{
+    "view": {
+        "name": "dim_tickets",
+        "sql_table_name": ""reporting"."dbt_tobias"."dim_tickets"",
+        "dimension_groups": [
+            {
+                "name": "ticket_created_at",
+                "type": "time",
+                "sql": "${TABLE
+            }.ticket_created_at", "description": "date/time when the ticket was created", "datatype": "timestamp", "timeframes": ["raw", "time", "hour", "date", "week", "month", "quarter", "year"
+        ]
+    }
+],
+"dimensions": [
+    {
+        "name": "pk_dim_tickets",
+        "sql": "${TABLE}.pk_dim_tickets", "description": "primary key for dim_tickets", "type": "number"
+},
+{
+    "name": "ticket_id",
+    "sql": "${TABLE}.ticket_id", "description": "ticket id", "type": "number"
+},
+{
+"name": "listing_id",
+"sql": "${TABLE}.listing_id", "description": "ticketswap listing id", "type": "number"
+},
+{
+"name": "dynamic_percentage_fee_calculator_seller_service_dim",
+"sql": "${ticket_price_amount_excl_vat} * {% parameter percentage_picker_seller %} / 100 ;;", "description": "The percentage of the seller service fee to be applied for tickets sold in the first year of the first contract with an Organizer Company partner.", "type": "string"
+}
+],
+"parameters": [
+    {
+    "name": "percentage_picker_seller",
+    "label": "Percentage picker | seller",
+    "description": "Dynamic seler service fee picker for the calculator",
+    "type": "unquoted",
+    "group_label": "Dynamic service fee calculator",
+    "default_value": "5",
+    "allowed_values": [LookerParameterAllowedValue(value="5", label="5%"), LookerParameterAllowedValue(value="10", label="10%")
+]
+}
+],
+"measures": []
+}
+}

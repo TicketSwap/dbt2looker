@@ -1,6 +1,6 @@
 import logging
-from typing import Dict, Optional, List
 from functools import reduce
+from typing import Dict, List, Optional
 
 from . import models
 
@@ -80,7 +80,7 @@ def compare_model_vs_node_columns(model: models.DbtModel, node: models.DbtCatalo
                 f"Column {model.unique_id}.{undocumented_column} has not been documented in YML, "
                 "but is present in the catalog. You should add it to your YML config, "
                 "or (if it is not required) remove it from the model SQL file, run the model, "
-                "and run `dbt docs generate` again"
+                "and run `dbt docs generate` again",
             )
         # after warning the user, return early
         return
@@ -90,13 +90,15 @@ def compare_model_vs_node_columns(model: models.DbtModel, node: models.DbtCatalo
         logging.warning(
             f"Column {model.unique_id}.{missing_column} documented in YML, "
             "but is not defined in the DBT catalog. Check the model SQL file "
-            "and ensure you have run the model and `dbt docs generate`"
+            "and ensure you have run the model and `dbt docs generate`",
         )
     return  # final return explicitly included for clarity
 
 
 def parse_typed_models(
-    raw_manifest: dict, raw_catalog: dict, tag: Optional[str] = None
+    raw_manifest: dict,
+    raw_catalog: dict,
+    tag: Optional[str] = None,
 ):
     catalog_nodes = parse_catalog_nodes(raw_catalog)
     dbt_models = parse_models(raw_manifest, tag=tag)
@@ -124,7 +126,7 @@ def parse_typed_models(
         if model.unique_id not in catalog_nodes:
             logging.warning(
                 f"Model {model.unique_id} not found in catalog. No looker view will be generated. "
-                f"Check if model has materialized in {adapter_type} at {model.relation_name}"
+                f"Check if model has materialized in {adapter_type} at {model.relation_name}",
             )
         else:
             # we know that the model is included in the catalog - extract it
@@ -140,20 +142,23 @@ def parse_typed_models(
                     column.name: column.copy(
                         update={
                             "data_type": get_column_type_from_catalog(
-                                catalog_nodes, model.unique_id, column.name
-                            )
-                        }
+                                catalog_nodes,
+                                model.unique_id,
+                                column.name,
+                            ),
+                        },
                     )
                     for column in model.columns.values()
-                }
-            }
+                },
+            },
         )
         for model in dbt_models
         if model.unique_id in catalog_nodes
     ]
     logging.debug("Found catalog entries for %d models", len(dbt_typed_models))
     logging.debug(
-        "Catalog entries missing for %d models", len(dbt_models) - len(dbt_typed_models)
+        "Catalog entries missing for %d models",
+        len(dbt_models) - len(dbt_typed_models),
     )
     check_models_for_missing_column_types(dbt_typed_models)
     return dbt_typed_models
@@ -164,12 +169,14 @@ class ColumnNotInCatalogError(Exception):
         super().__init__(
             f"Column {column_name} not found in catalog for model {model_id}, "
             "cannot find a data type for Looker. Is the column selected in the model SQL file, "
-            "and have you run the model since adding the column to it?"
+            "and have you run the model since adding the column to it?",
         )
 
 
 def get_column_type_from_catalog(
-    catalog_nodes: Dict[str, models.DbtCatalogNode], model_id: str, column_name: str
+    catalog_nodes: Dict[str, models.DbtCatalogNode],
+    model_id: str,
+    column_name: str,
 ):
     node = catalog_nodes.get(model_id)
     column = None if node is None else node.columns.get(column_name)

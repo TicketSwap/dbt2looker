@@ -1,8 +1,8 @@
 import argparse
 import json
 import logging
-import pathlib
 import os
+import pathlib
 
 try:
     from importlib.metadata import version
@@ -17,8 +17,7 @@ except ImportError:
     from yaml import Loader
 
 
-from . import parser
-from . import generator
+from . import generator, parser
 
 MANIFEST_PATH = "./manifest.json"
 DEFAULT_LOOKML_OUTPUT_DIR = "./lookml"
@@ -27,11 +26,11 @@ DEFAULT_LOOKML_OUTPUT_DIR = "./lookml"
 def get_manifest(prefix: str):
     manifest_path = os.path.join(prefix, "manifest.json")
     try:
-        with open(manifest_path, "r") as f:
+        with open(manifest_path) as f:
             raw_manifest = json.load(f)
-    except FileNotFoundError as e:
-        logging.error(
-            f"Could not find manifest file at {manifest_path}. Use --target-dir to change the search path for the manifest.json file."
+    except FileNotFoundError:
+        logging.exception(
+            f"Could not find manifest file at {manifest_path}. Use --target-dir to change the search path for the manifest.json file.",
         )
         raise SystemExit("Failed")
     logging.debug(f"Detected manifest at {manifest_path}")
@@ -41,11 +40,11 @@ def get_manifest(prefix: str):
 def get_catalog(prefix: str):
     catalog_path = os.path.join(prefix, "catalog.json")
     try:
-        with open(catalog_path, "r") as f:
+        with open(catalog_path) as f:
             raw_catalog = json.load(f)
-    except FileNotFoundError as e:
-        logging.error(
-            f"Could not find catalog file at {catalog_path}. Use --target-dir to change the search path for the catalog.json file."
+    except FileNotFoundError:
+        logging.exception(
+            f"Could not find catalog file at {catalog_path}. Use --target-dir to change the search path for the catalog.json file.",
         )
         raise SystemExit("Failed")
     logging.debug(f"Detected catalog at {catalog_path}")
@@ -55,11 +54,11 @@ def get_catalog(prefix: str):
 def get_dbt_project_config(prefix: str):
     project_path = os.path.join(prefix, "dbt_project.yml")
     try:
-        with open(project_path, "r") as f:
+        with open(project_path) as f:
             project_config = yaml.load(f, Loader=Loader)
-    except FileNotFoundError as e:
-        logging.error(
-            f"Could a dbt_project.yml file at {project_path}. Use --project-dir to change the search path for the dbt_project.yml file."
+    except FileNotFoundError:
+        logging.exception(
+            f"Could a dbt_project.yml file at {project_path}. Use --project-dir to change the search path for the dbt_project.yml file.",
         )
         raise SystemExit("Failed")
     logging.debug(f"Detected valid dbt config at {project_path}")
@@ -123,24 +122,24 @@ def run():
     # Get dbt models from manifest
     dbt_project_config = parser.parse_dbt_project_config(raw_config)
     typed_dbt_models = parser.parse_typed_models(
-        raw_manifest, raw_catalog, tag=args.tag
+        raw_manifest,
+        raw_catalog,
+        tag=args.tag,
     )
     adapter_type = parser.parse_adapter_type(raw_manifest)
 
     # Generate lookml views
-    lookml_views = [
-        generator.lookml_view_from_dbt_model(model, adapter_type)
-        for model in typed_dbt_models
-    ]
+    lookml_views = [generator.lookml_view_from_dbt_model(model, adapter_type) for model in typed_dbt_models]
     pathlib.Path(os.path.join(args.output_dir, "views")).mkdir(
-        parents=True, exist_ok=True
+        parents=True,
+        exist_ok=True,
     )
     for view in lookml_views:
         with open(os.path.join(args.output_dir, "views", view.filename), "w") as f:
             f.write(view.contents)
 
     logging.info(
-        f'Generated {len(lookml_views)} lookml views in {os.path.join(args.output_dir, "views")}'
+        f'Generated {len(lookml_views)} lookml views in {os.path.join(args.output_dir, "views")}',
     )
 
     # Generate Lookml models
@@ -148,6 +147,7 @@ def run():
     lookml_models = [
         generator.lookml_model_from_dbt_model(model, connection_name)
         for model in typed_dbt_models
+        if model.meta.add_explore
     ]
     for model in lookml_models:
         with open(os.path.join(args.output_dir, model.filename), "w") as f:

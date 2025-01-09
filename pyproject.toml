@@ -9,9 +9,9 @@ homepage = "https://github.com/hubble-data/dbt2looker"
 repository = "https://github.com/hubble-data/dbt2looker"
 
 [tool.poetry.dependencies]
-python = ">=3.7"
-lkml = ">=1.1"
-pydantic = ">=1.8"
+python = ">=3.8"
+lkml = " ^1.3.6"
+pydantic = "^2.10.5"
 PyYAML = ">=5"
 typing-extensions = ">=4.0"
 importlib-metadata = ">=4"
@@ -24,3 +24,4 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
 dbt2looker = 'dbt2looker.cli:run'
+
