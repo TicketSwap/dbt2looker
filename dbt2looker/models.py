@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Any, Union, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 try:
     from typing import Literal
@@ -9,6 +9,12 @@ from pydantic import BaseModel, Field, validator
 
 
 # dbt2looker utility types
+class UnsupportedLookerDimensionTypeError(ValueError):
+    def __init__(self, wrong_value: str):
+        msg = f"{wrong_value} is not a supported looker dimension type"
+        super().__init__(msg)
+
+
 class UnsupportedDbtAdapterError(ValueError):
     def __init__(self, wrong_value: str):
         msg = f"{wrong_value} is not a supported dbt adapter"
@@ -40,6 +46,21 @@ class LookerMeasureType(str, Enum):
     # percentile_distinct = 'percentile_distinct'
     sum = "sum"
     sum_distinct = "sum_distinct"
+
+
+class LookerDimensionType(str, Enum):
+    bin = "bin"
+    date = "date"
+    date_time = "date_time"
+    distance = "distance"
+    duration = "duration"
+    location = "location"
+    number = "number"
+    string = "string"
+    time = "time"
+    unqoted = "unquoted"
+    yesno = "yesno"
+    zipcode = "zipcode"
 
 
 class LookerJoinType(str, Enum):
@@ -105,9 +126,13 @@ class Dbt2LookerMeasure(BaseModel):
 class Dbt2LookerDimension(BaseModel):
     enabled: Optional[bool] = True
     name: Optional[str] = None
+    looker_data_type: Optional[LookerDimensionType] = None
     sql: Optional[str] = None
     description: Optional[str] = None
     value_format_name: Optional[LookerValueFormatName] = None
+    group_label: Optional[str] = None
+    label: Optional[str] = None
+    hidden: Optional[LookerHiddenType] = None
 
 
 class Dbt2LookerMeta(BaseModel):
@@ -159,6 +184,7 @@ class Dbt2LookerExploreJoin(BaseModel):
 
 
 class Dbt2LookerModelMeta(BaseModel):
+    dimensions: Optional[Dict[str, Dbt2LookerDimension]] = {}
     joins: Optional[List[Dbt2LookerExploreJoin]] = []
 
 

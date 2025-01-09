@@ -291,6 +291,22 @@ def lookml_dimensions_from_model(
         if column.meta.dimension.enabled
         and map_adapter_type_to_looker(adapter_type, column.data_type)
         in looker_scalar_types
+    ] + [
+        {
+            "name": dimension.name,
+            "type": dimension.looker_data_type,
+            "sql": dimension.sql,
+            "description": dimension.description,
+            **(
+                {"value_format_name": dimension.value_format_name.value}
+                if (
+                    dimension.value_format_name
+                    and dimension.looker_data_type == "number"
+                )
+                else {}
+            ),
+        }
+        for dimension in model.meta.dimensions.values()
     ]
 
 
