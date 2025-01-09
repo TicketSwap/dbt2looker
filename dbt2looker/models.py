@@ -123,14 +123,25 @@ class Dbt2LookerMeasure(BaseModel):
         return v
 
 
+class Dbt2LookerCustomDimension(BaseModel):
+    sql: str
+    description: str
+    type: LookerDimensionType = LookerDimensionType.string
+    value_format_name: Optional[LookerValueFormatName] = None
+    group_label: Optional[str] = None
+    group_item_label: Optional[str] = None
+    label: Optional[str] = None
+    hidden: Optional[LookerHiddenType] = None
+
+
 class Dbt2LookerDimension(BaseModel):
     enabled: Optional[bool] = True
     name: Optional[str] = None
-    looker_data_type: Optional[LookerDimensionType] = None
     sql: Optional[str] = None
     description: Optional[str] = None
     value_format_name: Optional[LookerValueFormatName] = None
     group_label: Optional[str] = None
+    group_item_label: Optional[str] = None
     label: Optional[str] = None
     hidden: Optional[LookerHiddenType] = None
 
@@ -184,7 +195,7 @@ class Dbt2LookerExploreJoin(BaseModel):
 
 
 class Dbt2LookerModelMeta(BaseModel):
-    dimensions: Optional[Dict[str, Dbt2LookerDimension]] = {}
+    dimensions: Optional[Dict[str, Dbt2LookerCustomDimension]] = {}
     joins: Optional[List[Dbt2LookerExploreJoin]] = []
 
 

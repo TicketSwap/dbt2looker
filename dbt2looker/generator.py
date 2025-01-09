@@ -1,4 +1,6 @@
+from __future__ import annotations
 import logging
+from typing import Optional
 import re
 
 import lkml
@@ -271,43 +273,74 @@ def lookml_dimension_groups_from_model(
 def lookml_dimensions_from_model(
     model: models.DbtModel, adapter_type: models.SupportedDbtAdapters
 ):
-    return [
-        {
-            "name": column.meta.dimension.name or column.name,
-            "type": map_adapter_type_to_looker(adapter_type, column.data_type),
-            "sql": column.meta.dimension.sql or f"${{TABLE}}.{column.name}",
-            "description": column.meta.dimension.description or column.description,
-            **(
-                {"value_format_name": column.meta.dimension.value_format_name.value}
-                if (
-                    column.meta.dimension.value_format_name
-                    and map_adapter_type_to_looker(adapter_type, column.data_type)
-                    == "number"
-                )
-                else {}
-            ),
-        }
+    column_dimensions = [
+        lookml_column_dimension(column.meta.dimension, adapter_type, column)
         for column in model.columns.values()
         if column.meta.dimension.enabled
         and map_adapter_type_to_looker(adapter_type, column.data_type)
         in looker_scalar_types
-    ] + [
-        {
-            "name": dimension.name,
-            "type": dimension.looker_data_type,
-            "sql": dimension.sql,
-            "description": dimension.description,
-            **(
-                {"value_format_name": dimension.value_format_name.value}
-                if (
-                    dimension.value_format_name
-                    and dimension.looker_data_type == "number"
-                )
-                else {}
-            ),
-        }
-        for dimension in model.meta.dimensions.values()
     ]
+    custom_dimensions = [
+        lookml_column_dimension(dimension, adapter_type, dimension_name=dimension_name)
+        for dimension_name, dimension in model.meta.dimensions.items()
+    ]
+    return column_dimensions + custom_dimensions
+
+
+def lookml_column_dimension(
+    dimension: models.Dbt2LookerDimension | models.Dbt2LookerCustomDimension,
+    adapter_type: models.SupportedDbtAdapters,
+    column: Optional[models.DbtModelColumn] = {},
+    dimension_name: Optional[str] = None,
+):
+    dimension = {
+        "name": dimension.name or column.name or dimension_name,
+        "type": map_adapter_type_to_looker(adapter_type, column.data_type)
+        or dimension.type.value,
+        "sql": dimension.sql or f"${{TABLE}}.{column.name}",
+        "description": dimension.description or column.description,
+    }
+    if dimension.value_format_name and (
+        map_adapter_type_to_looker(adapter_type, column.data_type) == "number"
+        or dimension.type.value == "number"
+    ):
+        dimension["value_format_name"] = dimension.value_format_name.value
+    if dimension.group_label:
+        dimension["group_label"] = dimension.group_label
+    if dimension.group_item_label:
+        dimension["group_item_label"] = dimension.group_item_label
+    if dimension.label:
+        dimension["label"] = dimension.label
+    if dimension.hidden:
+        dimension["hidden"] = dimension.hidden.value
+    return dimension
+
+
+def lookml_custom_dimension(
+    dimension_name: str,
+    dimension: models.Dbt2LookerCustomDimension,
+    adapter_type: models.SupportedDbtAdapters,
+):
+    dimension = {
+        "name": dimension_name,
+        "type": dimension.type.value,
+        "sql": dimension.sql,
+        "description": dimension.description,
+    }
+    if (
+        dimension.value_format_name
+        and map_adapter_type_to_looker(adapter_type, dimension.data_type) == "number"
+    ):
+        dimension["value_format_name"] = dimension.value_format_name.value
+    if dimension.group_label:
+        dimension["group_label"] = dimension.group_label
+    if dimension.group_item_label:
+        dimension["group_item_label"] = dimension.group_item_label
+    if dimension.label:
+        dimension["label"] = dimension.label
+    if dimension.hidden:
+        dimension["hidden"] = dimension.hidden.value
+    return dimension
 
 
 def lookml_measure_filters(measure: models.Dbt2LookerMeasure, model: models.DbtModel):
@@ -364,6 +397,8 @@ def lookml_measure(
         m["value_format_name"] = measure.value_format_name.value
     if measure.group_label:
         m["group_label"] = measure.group_label
+    if measure.group_item_label:
+        m["group_item_label"] = measure.group_item_label
     if measure.label:
         m["label"] = measure.label
     if measure.hidden:
@@ -372,7 +407,8 @@ def lookml_measure(
 
 
 def lookml_view_from_dbt_model(
-    model: models.DbtModel, adapter_type: models.SupportedDbtAdapters
+    model: models.DbtModel,
+    adapter_type: models.SupportedDbtAdapters,
 ):
     lookml = {
         "view": {
