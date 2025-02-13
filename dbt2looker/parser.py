@@ -40,9 +40,7 @@ def parse_models(raw_manifest: dict, tag=None) -> List[models.DbtModel]:
     if tag is None:
         selected_models = materialized_models
     else:
-        selected_models = [
-            model for model in materialized_models if tags_match(tag, model)
-        ]
+        selected_models = [model for model in materialized_models if tags_match(tag, model)]
 
     # Empty model files have many missing parameters
     for model in selected_models:
@@ -111,11 +109,7 @@ def parse_typed_models(
             model.name,
             len(model.columns),
             reduce(
-                lambda acc, col: acc
-                + len(col.meta.measures)
-                + len(col.meta.measure)
-                + len(col.meta.metrics)
-                + len(col.meta.metric),
+                lambda acc, col: acc + len(col.meta.measures),
                 model.columns.values(),
                 0,
             ),

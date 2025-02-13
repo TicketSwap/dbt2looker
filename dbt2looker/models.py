@@ -7,7 +7,7 @@ try:
     from typing import Literal
 except ImportError:
     from typing_extensions import Literal
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 # dbt2looker utility types
@@ -141,7 +141,8 @@ class Dbt2LookerBaseField(BaseModel):
 
 
 class Dbt2LookerMeasure(Dbt2LookerBaseField):
-    description: str
+    name: str
+    description: str | None = None
     drill_fields: list[str] | None = None
     filters: list[dict[str, str]] | None = []
     sql: str | None = None
@@ -174,7 +175,7 @@ class Dbt2LookerBaseDimension(Dbt2LookerBaseField):
 
 class Dbt2LookerCustomDimension(Dbt2LookerBaseDimension):
     sql: str
-    description: str
+    description: str | None = None
     type: LookerDimensionType = LookerDimensionType.string
 
 
@@ -194,10 +195,7 @@ class Dbt2LookerParameter(BaseModel):
 
 
 class Dbt2LookerMeta(BaseModel):
-    measures: dict[str, Dbt2LookerMeasure] | None = {}
-    measure: dict[str, Dbt2LookerMeasure] | None = {}
-    metrics: dict[str, Dbt2LookerMeasure] | None = {}
-    metric: dict[str, Dbt2LookerMeasure] | None = {}
+    measures: list[Dbt2LookerMeasure] | None = []
     dimension: Dbt2LookerDimension | None = Dbt2LookerDimension()
 
 
@@ -223,7 +221,7 @@ class DbtModelColumnMeta(Dbt2LookerMeta):
 
 class DbtModelColumn(BaseModel):
     name: str
-    description: str
+    description: str | None = None
     data_type: str | None = None
     meta: DbtModelColumnMeta
 
@@ -244,6 +242,7 @@ class Dbt2LookerExploreJoin(BaseModel):
 class Dbt2LookerModelMeta(BaseModel):
     add_explore: bool = False
     dimensions: dict[str, Dbt2LookerCustomDimension] | None = {}
+    measures: list[Dbt2LookerMeasure] | None = []
     parameters: dict[str, Dbt2LookerParameter] | None = {}
     joins: list[Dbt2LookerExploreJoin] | None = []
 

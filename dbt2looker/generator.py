@@ -210,8 +210,7 @@ def map_adapter_type_to_looker(
     looker_type = LOOKER_DTYPE_MAP[adapter_type].get(normalised_column_type)
     if (column_type is not None) and (looker_type is None):
         logging.warning(
-            "Column type %s not supported for conversion from %s to looker. "
-            "No dimension will be created.",
+            "Column type %s not supported for conversion from %s to looker. " "No dimension will be created.",
             column_type,
             adapter_type,
         )
@@ -219,9 +218,7 @@ def map_adapter_type_to_looker(
 
 
 def lookml_add_common_properties(
-    looker_field: models.Dbt2LookerCustomDimension
-    | models.Dbt2LookerDimension
-    | models.Dbt2LookerMeasure,
+    looker_field: models.Dbt2LookerCustomDimension | models.Dbt2LookerDimension | models.Dbt2LookerMeasure,
     looker_dict: dict,
     adapter_type: models.SupportedDbtAdapters,
 ):
@@ -236,9 +233,7 @@ def lookml_add_common_properties(
     if looker_field.label:
         looker_dict["label"] = looker_field.label
     if looker_field.links:
-        looker_dict["links"] = [
-            {"label": link.label, "url": link.url} for link in looker_field.links
-        ]
+        looker_dict["links"] = [{"label": link.label, "url": link.url} for link in looker_field.links]
     if looker_field.required_access_grants:
         looker_dict["required_access_grants"] = looker_field.required_access_grants
     if looker_field.required_fields:
@@ -261,19 +256,18 @@ def lookml_dimensions_from_model(
     adapter_type: models.SupportedDbtAdapters,
 ):
     column_dimensions = [
-        lookml_column_dimension(
+        lookml_dimension(
             dimension=column.meta.dimension,
             adapter_type=adapter_type,
             column=column,
         )
         for column in model.columns.values()
         if column.meta.dimension.enabled
-        and map_adapter_type_to_looker(adapter_type, column.data_type)
-        in looker_scalar_types
+        and map_adapter_type_to_looker(adapter_type, column.data_type) in looker_scalar_types
     ]
 
     custom_dimensions = [
-        lookml_column_dimension(
+        lookml_dimension(
             dimension=dimension,
             adapter_type=adapter_type,
             dimension_name=dimension_name,
@@ -289,19 +283,18 @@ def lookml_dimension_groups_from_model(
     adapter_type: models.SupportedDbtAdapters,
 ):
     return [
-        lookml_column_dimension(
+        lookml_dimension(
             dimension=column.meta.dimension,
             adapter_type=adapter_type,
             column=column,
         )
         for column in model.columns.values()
         if column.meta.dimension.enabled
-        and map_adapter_type_to_looker(adapter_type, column.data_type)
-        in looker_date_time_types
+        and map_adapter_type_to_looker(adapter_type, column.data_type) in looker_date_time_types
     ]
 
 
-def lookml_column_dimension(
+def lookml_dimension(
     dimension: models.Dbt2LookerDimension | models.Dbt2LookerCustomDimension,
     adapter_type: models.SupportedDbtAdapters,
     column: models.DbtModelColumn | None = None,
@@ -338,7 +331,6 @@ def lookml_column_dimension(
     if d["type"] in looker_date_time_types:
         d["timeframes"] = dimension.timeframes or looker_timeframes
     d = lookml_add_common_properties(dimension, d, adapter_type)
-
     if d["name"].startswith("pk_"):
         d["primary_key"] = models.LookerBooleanType.yes.value
         d["hidden"] = models.LookerBooleanType.yes.value
@@ -347,46 +339,40 @@ def lookml_column_dimension(
     return d
 
 
-def lookml_measures_from_model(model: models.DbtModel):
+def lookml_measures_from_model(model: models.DbtModel, adapter_type: models.SupportedDbtAdapters):
     return [
-        lookml_measure(measure_name, column, measure, model)
+        lookml_measure(measure, model, adapter_type, column)
         for column in model.columns.values()
-        for measure_name, measure in {
-            **column.meta.measures,
-            **column.meta.measure,
-            **column.meta.metrics,
-            **column.meta.metric,
-        }.items()
-    ]
+        for measure in column.meta.measures
+    ] + [lookml_measure(measure, model, adapter_type) for measure in model.meta.measures]
 
 
 def lookml_measure(
-    measure_name: str,
-    column: models.DbtModelColumn,
     measure: models.Dbt2LookerMeasure,
     model: models.DbtModel,
+    adapter_type: models.SupportedDbtAdapters,
+    column: models.DbtModelColumn | None = None,
 ):
-    m = {
-        "name": measure_name,
-        "type": measure.type.value,
-        "sql": measure.sql or f"${{TABLE}}.{column.name}",
-        "description": measure.description
-        or column.description
-        or f"{measure.type.value.capitalize()} of {column.name}",
-    }
+    m = {"name": measure.name, "type": measure.type.value}
+    if column:
+        m["sql"] = (measure.sql or f"${{TABLE}}.{column.name}",)
+        m["description"] = (
+            measure.description or column.description or f"{measure.type.value.capitalize()} of {column.name}",
+        )
+    else:
+        if measure.sql:
+            m["sql"] = measure.sql
+        if measure.description:
+            m["description"] = measure.description
     if measure.filters:
         m["filters"] = lookml_measure_filters(measure, model)
-    m = lookml_add_common_properties(measure, m, model.adapter_type)
+    m = lookml_add_common_properties(measure, m, adapter_type)
     return m
 
 
 def lookml_measure_filters(measure: models.Dbt2LookerMeasure, model: models.DbtModel):
     try:
-        columns = {
-            column_name: model.columns[column_name]
-            for f in measure.filters
-            for column_name in f
-        }
+        columns = {column_name: model.columns[column_name] for f in measure.filters for column_name in f}
     except KeyError as e:
         msg = (
             f"Model {model.unique_id} contains a measure that references a non_existent column: {e}\n"
@@ -396,19 +382,13 @@ def lookml_measure_filters(measure: models.Dbt2LookerMeasure, model: models.DbtM
             msg,
         ) from e
     return [
-        {
-            (columns[column_name].meta.dimension.name or column_name): fexpr
-            for column_name, fexpr in f.items()
-        }
+        {(columns[column_name].meta.dimension.name or column_name): fexpr for column_name, fexpr in f.items()}
         for f in measure.filters
     ]
 
 
 def lookml_parameters_from_model(model: models.DbtModel):
-    return [
-        lookml_parameter(parameter_name, parameter)
-        for parameter_name, parameter in model.meta.parameters.items()
-    ]
+    return [lookml_parameter(parameter_name, parameter) for parameter_name, parameter in model.meta.parameters.items()]
 
 
 def lookml_parameter(parameter_name: str, parameter: models.Dbt2LookerParameter):
@@ -423,9 +403,7 @@ def lookml_parameter(parameter_name: str, parameter: models.Dbt2LookerParameter)
     if parameter.default_value:
         p["default_value"] = parameter.default_value
     if parameter.allowed_values:
-        p["allowed_values"] = [
-            {"value": v.value, "label": v.label} for v in parameter.allowed_values
-        ]
+        p["allowed_values"] = [{"value": v.value, "label": v.label} for v in parameter.allowed_values]
 
     return p
 
@@ -441,7 +419,7 @@ def lookml_view_from_dbt_model(
             "dimension_groups": lookml_dimension_groups_from_model(model, adapter_type),
             "dimensions": lookml_dimensions_from_model(model, adapter_type),
             "parameters": lookml_parameters_from_model(model),
-            "measures": lookml_measures_from_model(model),
+            "measures": lookml_measures_from_model(model, adapter_type),
         },
     }
     logging.debug(
@@ -453,7 +431,7 @@ def lookml_view_from_dbt_model(
         len(lookml["view"]["parameters"]),
     )
     with open("lookml.json", "w") as f:
-        json.dump(lookml, f, indent=2)
+        f.write(json.dumps(lookml, indent=2))
     contents = lkml.dump(lookml)
     filename = f"{model.name}.view.lkml"
     return models.LookViewFile(filename=filename, contents=contents)
