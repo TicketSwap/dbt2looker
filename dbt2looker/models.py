@@ -242,6 +242,7 @@ class Dbt2LookerExploreJoin(BaseModel):
 
 
 class Dbt2LookerModelMeta(BaseModel):
+    add_explore: bool = False
     dimensions: dict[str, Dbt2LookerCustomDimension] | None = {}
     parameters: dict[str, Dbt2LookerParameter] | None = {}
     joins: list[Dbt2LookerExploreJoin] | None = []
@@ -263,10 +264,7 @@ class DbtModel(DbtNode):
 
     @field_validator("columns")
     def case_insensitive_column_names(cls, v: Dict[str, DbtModelColumn]):
-        return {
-            name.lower(): column.model_copy(update={"name": column.name.lower()})
-            for name, column in v.items()
-        }
+        return {name.lower(): column.model_copy(update={"name": column.name.lower()}) for name, column in v.items()}
 
 
 class DbtManifestMetadata(BaseModel):
@@ -307,10 +305,7 @@ class DbtCatalogNode(BaseModel):
 
     @field_validator("columns")
     def case_insensitive_column_names(cls, v: Dict[str, DbtCatalogNodeColumn]):
-        return {
-            name.lower(): column.copy(update={"name": column.name.lower()})
-            for name, column in v.items()
-        }
+        return {name.lower(): column.copy(update={"name": column.name.lower()}) for name, column in v.items()}
 
 
 class DbtCatalog(BaseModel):

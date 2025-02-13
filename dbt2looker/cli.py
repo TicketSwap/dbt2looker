@@ -122,17 +122,17 @@ def run():
     # Get dbt models from manifest
     dbt_project_config = parser.parse_dbt_project_config(raw_config)
     typed_dbt_models = parser.parse_typed_models(
-        raw_manifest, raw_catalog, tag=args.tag,
+        raw_manifest,
+        raw_catalog,
+        tag=args.tag,
     )
     adapter_type = parser.parse_adapter_type(raw_manifest)
 
     # Generate lookml views
-    lookml_views = [
-        generator.lookml_view_from_dbt_model(model, adapter_type)
-        for model in typed_dbt_models
-    ]
+    lookml_views = [generator.lookml_view_from_dbt_model(model, adapter_type) for model in typed_dbt_models]
     pathlib.Path(os.path.join(args.output_dir, "views")).mkdir(
-        parents=True, exist_ok=True,
+        parents=True,
+        exist_ok=True,
     )
     for view in lookml_views:
         with open(os.path.join(args.output_dir, "views", view.filename), "w") as f:
@@ -147,6 +147,7 @@ def run():
     lookml_models = [
         generator.lookml_model_from_dbt_model(model, connection_name)
         for model in typed_dbt_models
+        if model.meta.add_explore
     ]
     for model in lookml_models:
         with open(os.path.join(args.output_dir, model.filename), "w") as f:
