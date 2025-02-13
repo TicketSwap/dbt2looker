@@ -1,6 +1,7 @@
 from __future__ import annotations
+
 import logging
-from typing import Optional
+import json
 import re
 
 import lkml
@@ -179,12 +180,10 @@ LOOKER_DTYPE_MAP = {
 }
 
 looker_date_time_types = ["datetime", "timestamp"]
-looker_date_types = ["date"]
-looker_scalar_types = ["number", "yesno", "string"]
+looker_scalar_types = ["number", "yesno", "string", "date"]
 
 looker_timeframes = [
     "raw",
-    "time",
     "date",
     "week",
     "month",
@@ -192,13 +191,16 @@ looker_timeframes = [
     "year",
 ]
 
+looker_intervals = ["hour", "day"]
+
 
 def normalise_spark_types(column_type: str) -> str:
     return re.match(r"^[^\(]*", column_type).group(0)
 
 
 def map_adapter_type_to_looker(
-    adapter_type: models.SupportedDbtAdapters, column_type: str
+    adapter_type: models.SupportedDbtAdapters,
+    column_type: str,
 ):
     normalised_column_type = (
         normalise_spark_types(column_type)
@@ -216,152 +218,133 @@ def map_adapter_type_to_looker(
     return looker_type
 
 
-def lookml_date_time_dimension_group(
-    column: models.DbtModelColumn, adapter_type: models.SupportedDbtAdapters
+def lookml_add_common_properties(
+    looker_field: models.Dbt2LookerCustomDimension
+    | models.Dbt2LookerDimension
+    | models.Dbt2LookerMeasure,
+    looker_dict: dict,
+    adapter_type: models.SupportedDbtAdapters,
 ):
-    return {
-        "name": column.meta.dimension.name or column.name,
-        "type": "time",
-        "sql": column.meta.dimension.sql or f"${{TABLE}}.{column.name}",
-        "description": column.meta.dimension.description or column.description,
-        "datatype": map_adapter_type_to_looker(adapter_type, column.data_type),
-        "timeframes": [
-            "raw",
-            "time",
-            "hour",
-            "date",
-            "week",
-            "month",
-            "quarter",
-            "year",
-        ],
-    }
-
-
-def lookml_date_dimension_group(
-    column: models.DbtModelColumn, adapter_type: models.SupportedDbtAdapters
-):
-    return {
-        "name": column.meta.dimension.name or column.name,
-        "type": "time",
-        "sql": column.meta.dimension.sql or f"${{TABLE}}.{column.name}",
-        "description": column.meta.dimension.description or column.description,
-        "datatype": map_adapter_type_to_looker(adapter_type, column.data_type),
-        "timeframes": ["raw", "date", "week", "month", "quarter", "year"],
-    }
-
-
-def lookml_dimension_groups_from_model(
-    model: models.DbtModel, adapter_type: models.SupportedDbtAdapters
-):
-    date_times = [
-        lookml_date_time_dimension_group(column, adapter_type)
-        for column in model.columns.values()
-        if map_adapter_type_to_looker(adapter_type, column.data_type)
-        in looker_date_time_types
-    ]
-    dates = [
-        lookml_date_dimension_group(column, adapter_type)
-        for column in model.columns.values()
-        if column.meta.dimension.enabled
-        and map_adapter_type_to_looker(adapter_type, column.data_type)
-        in looker_date_types
-    ]
-    return date_times + dates
+    if looker_field.group_item_label:
+        looker_dict["group_item_label"] = looker_field.group_item_label
+    if looker_field.group_label:
+        looker_dict["group_label"] = looker_field.group_label
+    if looker_field.hidden:
+        looker_dict["hidden"] = looker_field.hidden.value
+    if looker_field.html:
+        looker_dict["html"] = looker_field.html
+    if looker_field.label:
+        looker_dict["label"] = looker_field.label
+    if looker_field.links:
+        looker_dict["links"] = [
+            {"label": link.label, "url": link.url} for link in looker_field.links
+        ]
+    if looker_field.required_access_grants:
+        looker_dict["required_access_grants"] = looker_field.required_access_grants
+    if looker_field.required_fields:
+        looker_dict["required_fields"] = looker_field.required_fields
+    if looker_field.suggestable:
+        looker_dict["suggestable"] = looker_field.suggestable.value
+    if looker_field.tags:
+        looker_dict["tags"] = looker_field.tags
+    if looker_field.value_format:
+        looker_dict["value_format"] = looker_field.value_format
+    if looker_field.value_format_name:
+        looker_dict["value_format_name"] = looker_field.value_format_name.value
+    if looker_field.view_label:
+        looker_dict["view_label"] = looker_field.view_label
+    return looker_dict
 
 
 def lookml_dimensions_from_model(
-    model: models.DbtModel, adapter_type: models.SupportedDbtAdapters
+    model: models.DbtModel,
+    adapter_type: models.SupportedDbtAdapters,
 ):
     column_dimensions = [
-        lookml_column_dimension(column.meta.dimension, adapter_type, column)
+        lookml_column_dimension(
+            dimension=column.meta.dimension,
+            adapter_type=adapter_type,
+            column=column,
+        )
         for column in model.columns.values()
         if column.meta.dimension.enabled
         and map_adapter_type_to_looker(adapter_type, column.data_type)
         in looker_scalar_types
     ]
+
     custom_dimensions = [
-        lookml_column_dimension(dimension, adapter_type, dimension_name=dimension_name)
+        lookml_column_dimension(
+            dimension=dimension,
+            adapter_type=adapter_type,
+            dimension_name=dimension_name,
+        )
         for dimension_name, dimension in model.meta.dimensions.items()
+        if dimension.type in looker_scalar_types
     ]
     return column_dimensions + custom_dimensions
+
+
+def lookml_dimension_groups_from_model(
+    model: models.DbtModel,
+    adapter_type: models.SupportedDbtAdapters,
+):
+    return [
+        lookml_column_dimension(
+            dimension=column.meta.dimension,
+            adapter_type=adapter_type,
+            column=column,
+        )
+        for column in model.columns.values()
+        if column.meta.dimension.enabled
+        and map_adapter_type_to_looker(adapter_type, column.data_type)
+        in looker_date_time_types
+    ]
 
 
 def lookml_column_dimension(
     dimension: models.Dbt2LookerDimension | models.Dbt2LookerCustomDimension,
     adapter_type: models.SupportedDbtAdapters,
-    column: Optional[models.DbtModelColumn] = {},
-    dimension_name: Optional[str] = None,
+    column: models.DbtModelColumn | None = None,
+    dimension_name: str | None = None,
 ):
-    dimension = {
-        "name": dimension.name or column.name or dimension_name,
-        "type": map_adapter_type_to_looker(adapter_type, column.data_type)
-        or dimension.type.value,
+    d = {
+        "name": dimension_name or dimension.name or column.name,
         "sql": dimension.sql or f"${{TABLE}}.{column.name}",
         "description": dimension.description or column.description,
     }
-    if dimension.value_format_name and (
-        map_adapter_type_to_looker(adapter_type, column.data_type) == "number"
-        or dimension.type.value == "number"
-    ):
-        dimension["value_format_name"] = dimension.value_format_name.value
-    if dimension.group_label:
-        dimension["group_label"] = dimension.group_label
-    if dimension.group_item_label:
-        dimension["group_item_label"] = dimension.group_item_label
-    if dimension.label:
-        dimension["label"] = dimension.label
-    if dimension.hidden:
-        dimension["hidden"] = dimension.hidden.value
-    return dimension
+    d["type"] = (
+        dimension.type.value
+        if hasattr(dimension, "type")
+        else map_adapter_type_to_looker(adapter_type, column.data_type)
+    )
+    if d["type"] == "date" or d["type"] in looker_date_time_types:
+        d["convert_tz"] = dimension.convert_tz or models.LookerBooleanType.no.value
+    if dimension.intervals:
+        d["intervals"] = dimension.intervals or looker_intervals
+    if dimension.map_layer_name:
+        d["map_layer_name"] = dimension.map_layer_name
+    if dimension.primary_key:
+        d["primary_key"] = dimension.primary_key.value
+    if dimension.sql_end:
+        d["sql_end"] = dimension.sql_end
+    if dimension.sql_latitude:
+        d["sql_latitude"] = dimension.sql_latitude
+    if dimension.sql_longitude:
+        d["sql_longitude"] = dimension.sql_longitude
+    if dimension.sql_start:
+        d["sql_start"] = dimension.sql_start
+    if dimension.suggestions:
+        d["suggestions"] = dimension.suggestions
+    if d["type"] in looker_date_time_types:
+        d["timeframes"] = dimension.timeframes or looker_timeframes
+    d = lookml_add_common_properties(dimension, d, adapter_type)
 
-
-def lookml_custom_dimension(
-    dimension_name: str,
-    dimension: models.Dbt2LookerCustomDimension,
-    adapter_type: models.SupportedDbtAdapters,
-):
-    dimension = {
-        "name": dimension_name,
-        "type": dimension.type.value,
-        "sql": dimension.sql,
-        "description": dimension.description,
-    }
-    if (
-        dimension.value_format_name
-        and map_adapter_type_to_looker(adapter_type, dimension.data_type) == "number"
-    ):
-        dimension["value_format_name"] = dimension.value_format_name.value
-    if dimension.group_label:
-        dimension["group_label"] = dimension.group_label
-    if dimension.group_item_label:
-        dimension["group_item_label"] = dimension.group_item_label
-    if dimension.label:
-        dimension["label"] = dimension.label
-    if dimension.hidden:
-        dimension["hidden"] = dimension.hidden.value
-    return dimension
-
-
-def lookml_measure_filters(measure: models.Dbt2LookerMeasure, model: models.DbtModel):
-    try:
-        columns = {
-            column_name: model.columns[column_name]
-            for f in measure.filters
-            for column_name in f
-        }
-    except KeyError as e:
-        raise ValueError(
-            f"Model {model.unique_id} contains a measure that references a non_existent column: {e}\n"
-            f"Ensure that dbt model {model.unique_id} contains a column: {e}"
-        ) from e
-    return [
-        {
-            (columns[column_name].meta.dimension.name or column_name): fexpr
-            for column_name, fexpr in f.items()
-        }
-        for f in measure.filters
-    ]
+    if d["name"].startswith("pk_"):
+        d["primary_key"] = models.LookerBooleanType.yes.value
+        d["hidden"] = models.LookerBooleanType.yes.value
+    if d["name"].startswith("fk_"):
+        d["hidden"] = models.LookerBooleanType.yes.value
+    return d
 
 
 def lookml_measures_from_model(model: models.DbtModel):
@@ -393,17 +376,58 @@ def lookml_measure(
     }
     if measure.filters:
         m["filters"] = lookml_measure_filters(measure, model)
-    if measure.value_format_name:
-        m["value_format_name"] = measure.value_format_name.value
-    if measure.group_label:
-        m["group_label"] = measure.group_label
-    if measure.group_item_label:
-        m["group_item_label"] = measure.group_item_label
-    if measure.label:
-        m["label"] = measure.label
-    if measure.hidden:
-        m["hidden"] = measure.hidden.value
+    m = lookml_add_common_properties(measure, m, model.adapter_type)
     return m
+
+
+def lookml_measure_filters(measure: models.Dbt2LookerMeasure, model: models.DbtModel):
+    try:
+        columns = {
+            column_name: model.columns[column_name]
+            for f in measure.filters
+            for column_name in f
+        }
+    except KeyError as e:
+        msg = (
+            f"Model {model.unique_id} contains a measure that references a non_existent column: {e}\n"
+            f"Ensure that dbt model {model.unique_id} contains a column: {e}"
+        )
+        raise ValueError(
+            msg,
+        ) from e
+    return [
+        {
+            (columns[column_name].meta.dimension.name or column_name): fexpr
+            for column_name, fexpr in f.items()
+        }
+        for f in measure.filters
+    ]
+
+
+def lookml_parameters_from_model(model: models.DbtModel):
+    return [
+        lookml_parameter(parameter_name, parameter)
+        for parameter_name, parameter in model.meta.parameters.items()
+    ]
+
+
+def lookml_parameter(parameter_name: str, parameter: models.Dbt2LookerParameter):
+    p = {
+        "name": parameter_name,
+        "label": parameter.label,
+        "description": parameter.description,
+        "type": parameter.type.value,
+    }
+    if parameter.group_label:
+        p["group_label"] = parameter.group_label
+    if parameter.default_value:
+        p["default_value"] = parameter.default_value
+    if parameter.allowed_values:
+        p["allowed_values"] = [
+            {"value": v.value, "label": v.label} for v in parameter.allowed_values
+        ]
+
+    return p
 
 
 def lookml_view_from_dbt_model(
@@ -416,15 +440,20 @@ def lookml_view_from_dbt_model(
             "sql_table_name": model.relation_name,
             "dimension_groups": lookml_dimension_groups_from_model(model, adapter_type),
             "dimensions": lookml_dimensions_from_model(model, adapter_type),
+            "parameters": lookml_parameters_from_model(model),
             "measures": lookml_measures_from_model(model),
-        }
+        },
     }
     logging.debug(
-        f"Created view from model %s with %d measures, %d dimensions",
+        "Created view from model %s with %d measures, %d dimensions, %d dimension groups",
         model.name,
         len(lookml["view"]["measures"]),
         len(lookml["view"]["dimensions"]),
+        len(lookml["view"]["dimension_groups"]),
+        len(lookml["view"]["parameters"]),
     )
+    with open("lookml.json", "w") as f:
+        json.dump(lookml, f, indent=2)
     contents = lkml.dump(lookml)
     filename = f"{model.name}.view.lkml"
     return models.LookViewFile(filename=filename, contents=contents)
