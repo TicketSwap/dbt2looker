@@ -174,6 +174,7 @@ class Dbt2LookerBaseDimension(Dbt2LookerBaseField):
 
 
 class Dbt2LookerCustomDimension(Dbt2LookerBaseDimension):
+    name: str
     sql: str
     description: str | None = None
     type: LookerDimensionType = LookerDimensionType.string
@@ -241,7 +242,7 @@ class Dbt2LookerExploreJoin(BaseModel):
 
 class Dbt2LookerModelMeta(BaseModel):
     add_explore: bool = False
-    dimensions: dict[str, Dbt2LookerCustomDimension] | None = {}
+    dimensions: list[Dbt2LookerCustomDimension] | None = {}
     measures: list[Dbt2LookerMeasure] | None = []
     parameters: dict[str, Dbt2LookerParameter] | None = {}
     joins: list[Dbt2LookerExploreJoin] | None = []

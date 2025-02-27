@@ -220,8 +220,7 @@ def map_adapter_type_to_looker(
 def lookml_add_common_properties(
     looker_field: models.Dbt2LookerCustomDimension | models.Dbt2LookerDimension | models.Dbt2LookerMeasure,
     looker_dict: dict,
-    adapter_type: models.SupportedDbtAdapters,
-):
+):    
     if looker_field.group_item_label:
         looker_dict["group_item_label"] = looker_field.group_item_label
     if looker_field.group_label:
@@ -270,9 +269,8 @@ def lookml_dimensions_from_model(
         lookml_dimension(
             dimension=dimension,
             adapter_type=adapter_type,
-            dimension_name=dimension_name,
         )
-        for dimension_name, dimension in model.meta.dimensions.items()
+        for dimension in model.meta.dimensions
         if dimension.type in looker_scalar_types
     ]
     return column_dimensions + custom_dimensions
@@ -298,10 +296,9 @@ def lookml_dimension(
     dimension: models.Dbt2LookerDimension | models.Dbt2LookerCustomDimension,
     adapter_type: models.SupportedDbtAdapters,
     column: models.DbtModelColumn | None = None,
-    dimension_name: str | None = None,
 ):
     d = {
-        "name": dimension_name or dimension.name or column.name,
+        "name": dimension.name or column.name,
         "sql": dimension.sql or f"${{TABLE}}.{column.name}",
         "description": dimension.description or column.description,
     }
@@ -330,7 +327,7 @@ def lookml_dimension(
         d["suggestions"] = dimension.suggestions
     if d["type"] in looker_date_time_types:
         d["timeframes"] = dimension.timeframes or looker_timeframes
-    d = lookml_add_common_properties(dimension, d, adapter_type)
+    d = lookml_add_common_properties(dimension, d)
     if d["name"].startswith("pk_"):
         d["primary_key"] = models.LookerBooleanType.yes.value
         d["hidden"] = models.LookerBooleanType.yes.value
@@ -366,7 +363,7 @@ def lookml_measure(
             m["description"] = measure.description
     if measure.filters:
         m["filters"] = lookml_measure_filters(measure, model)
-    m = lookml_add_common_properties(measure, m, adapter_type)
+    m = lookml_add_common_properties(measure, m)
     return m
 
 
