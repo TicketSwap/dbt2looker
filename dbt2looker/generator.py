@@ -299,7 +299,6 @@ def lookml_dimension(
 ):
     d = {
         "name": dimension.name or column.name,
-        "sql": dimension.sql or f"${{TABLE}}.{column.name}",
         "description": dimension.description or column.description,
     }
     d["type"] = (
@@ -307,6 +306,8 @@ def lookml_dimension(
         if hasattr(dimension, "type")
         else map_adapter_type_to_looker(adapter_type, column.data_type)
     )
+    if dimension.sql:
+        d["sql"] = dimension.sql
     if d["type"] == "date" or d["type"] in looker_date_time_types:
         d["convert_tz"] = dimension.convert_tz or models.LookerBooleanType.no.value
     if dimension.intervals:
