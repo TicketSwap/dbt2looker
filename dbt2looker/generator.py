@@ -233,7 +233,7 @@ def lookml_add_common_properties(
     if looker_field.label:
         looker_dict["label"] = looker_field.label
     if looker_field.links:
-        looker_dict["links"] = [{"label": link.label, "url": link.url} for link in looker_field.links]
+        looker_dict["links"] = looker_field.links
     if looker_field.required_access_grants:
         looker_dict["required_access_grants"] = looker_field.required_access_grants
     if looker_field.required_fields:
