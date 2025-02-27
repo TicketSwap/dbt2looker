@@ -197,7 +197,7 @@ class Dbt2LookerParameter(BaseModel):
 
 class Dbt2LookerMeta(BaseModel):
     measures: list[Dbt2LookerMeasure] | None = []
-    dimension: Dbt2LookerDimension | None = Dbt2LookerDimension()
+    dimensions: Dbt2LookerDimension | None = Dbt2LookerDimension()
 
 
 # Looker file types
