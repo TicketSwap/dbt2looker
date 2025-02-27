@@ -123,6 +123,7 @@ class LookerLinkType(BaseModel):
 
 
 class Dbt2LookerBaseField(BaseModel):
+    description: str | None = None
     enabled: bool = True
     group_item_label: str | None = None
     group_label: str | None = None
@@ -142,7 +143,6 @@ class Dbt2LookerBaseField(BaseModel):
 
 class Dbt2LookerMeasure(Dbt2LookerBaseField):
     name: str
-    description: str | None = None
     drill_fields: list[str] | None = None
     filters: list[dict[str, str]] | None = []
     sql: str | None = None
@@ -170,20 +170,17 @@ class Dbt2LookerBaseDimension(Dbt2LookerBaseField):
     sql_latitude: str | None = None
     sql_longitude: str | None = None
     sql_start: str | None = None
+    sql: str | None = None
     timeframes: list[str] | None = None
 
 
 class Dbt2LookerCustomDimension(Dbt2LookerBaseDimension):
     name: str
-    sql: str
-    description: str | None = None
     type: LookerDimensionType = LookerDimensionType.string
 
 
 class Dbt2LookerDimension(Dbt2LookerBaseDimension):
     name: str | None = None
-    sql: str | None = None
-    description: str | None = None
 
 
 class Dbt2LookerParameter(BaseModel):
@@ -197,7 +194,7 @@ class Dbt2LookerParameter(BaseModel):
 
 class Dbt2LookerMeta(BaseModel):
     measures: list[Dbt2LookerMeasure] | None = []
-    dimensions: Dbt2LookerDimension | None = Dbt2LookerDimension()
+    dimension: Dbt2LookerDimension | None = Dbt2LookerDimension()
 
 
 # Looker file types
