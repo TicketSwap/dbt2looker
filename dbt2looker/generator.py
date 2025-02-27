@@ -327,7 +327,8 @@ def lookml_dimension(
         d["sql_start"] = dimension.sql_start
     if dimension.suggestions:
         d["suggestions"] = dimension.suggestions
-    if d["type"] in looker_date_time_types:
+    if d["type"] in looker_date_time_types: # check if is a dimension group
+        d["name"] = d["name"].removesuffix("_at")
         d["timeframes"] = dimension.timeframes or looker_timeframes
     d = lookml_add_common_properties(dimension, d)
     if d["name"].startswith("pk_"):
