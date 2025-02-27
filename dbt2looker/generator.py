@@ -184,6 +184,7 @@ looker_scalar_types = ["number", "yesno", "string", "date"]
 
 looker_timeframes = [
     "raw",
+    "time",
     "date",
     "week",
     "month",
