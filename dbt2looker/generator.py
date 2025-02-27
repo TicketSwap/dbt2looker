@@ -19,7 +19,7 @@ LOOKER_DTYPE_MAP = {
         "BOOLEAN": "yesno",
         "STRING": "string",
         "TIMESTAMP": "timestamp",
-        "DATETIME": "datetime",
+        "DATETIME": "time",
         "DATE": "date",
         "TIME": "string",  # Can time-only be handled better in looker?
         "BOOL": "yesno",
@@ -50,7 +50,7 @@ LOOKER_DTYPE_MAP = {
         "VARBINARY": "string",
         "BOOLEAN": "yesno",
         "DATE": "date",
-        "DATETIME": "datetime",
+        "DATETIME": "time",
         "TIME": "string",  # can we support time?
         "TIMESTAMP": "timestamp",
         "TIMESTAMP_NTZ": "timestamp",
@@ -87,8 +87,8 @@ LOOKER_DTYPE_MAP = {
         "NVARCHAR": "string",
         "TEXT": "string",
         "DATE": "date",
-        "TIMESTAMP": "timestamp",
-        "TIMESTAMP WITHOUT TIME ZONE": "timestamp",
+        "TIMESTAMP": "time",
+        "TIMESTAMP WITHOUT TIME ZONE": "time",
         # TIMESTAMPTZ not supported
         # TIMESTAMP WITH TIME ZONE not supported
         "GEOMETRY": "string",
@@ -150,8 +150,8 @@ LOOKER_DTYPE_MAP = {
         "NVARCHAR": "string",
         "TEXT": "string",
         "DATE": "date",
-        "TIMESTAMP": "timestamp",
-        "TIMESTAMP WITHOUT TIME ZONE": "timestamp",
+        "TIMESTAMP": "time",
+        "TIMESTAMP WITHOUT TIME ZONE": "time",
         # TIMESTAMPTZ not supported
         # TIMESTAMP WITH TIME ZONE not supported
         "GEOMETRY": "string",
@@ -174,13 +174,14 @@ LOOKER_DTYPE_MAP = {
         "VARCHAR": "string",
         "CHAR": "string",
         "BOOLEAN": "yesno",
-        "TIMESTAMP": "timestamp",
-        "DATE": "datetime",
+        "TIMESTAMP": "time",
+        "DATE": "time",
     },
 }
 
-looker_date_time_types = ["datetime", "timestamp"]
-looker_scalar_types = ["number", "yesno", "string", "date"]
+looker_dimension_group_types = ["time", "duration"]
+looker_date_types = ["date", "time", "duration"]
+looker_dimension_types = ["number", "yesno", "string", "date", "location"]
 
 looker_timeframes = [
     "raw",
@@ -192,7 +193,7 @@ looker_timeframes = [
     "year",
 ]
 
-looker_intervals = ["hour", "day"]
+looker_intervals = ["minute", "hour", "day"]
 
 
 def normalise_spark_types(column_type: str) -> str:
@@ -263,7 +264,6 @@ def lookml_dimensions_from_model(
         )
         for column in model.columns.values()
         if column.meta.dimension.enabled
-        and map_adapter_type_to_looker(adapter_type, column.data_type) in looker_scalar_types
     ]
 
     custom_dimensions = [
@@ -272,25 +272,8 @@ def lookml_dimensions_from_model(
             adapter_type=adapter_type,
         )
         for dimension in model.meta.dimensions
-        if dimension.type in looker_scalar_types
     ]
     return column_dimensions + custom_dimensions
-
-
-def lookml_dimension_groups_from_model(
-    model: models.DbtModel,
-    adapter_type: models.SupportedDbtAdapters,
-):
-    return [
-        lookml_dimension(
-            dimension=column.meta.dimension,
-            adapter_type=adapter_type,
-            column=column,
-        )
-        for column in model.columns.values()
-        if column.meta.dimension.enabled
-        and map_adapter_type_to_looker(adapter_type, column.data_type) in looker_date_time_types
-    ]
 
 
 def lookml_dimension(
@@ -309,7 +292,7 @@ def lookml_dimension(
     )
     if dimension.sql:
         d["sql"] = dimension.sql
-    if d["type"] == "date" or d["type"] in looker_date_time_types:
+    if d["type"] in looker_date_types:
         d["convert_tz"] = dimension.convert_tz or models.LookerBooleanType.no.value
     if dimension.intervals:
         d["intervals"] = dimension.intervals or looker_intervals
@@ -327,15 +310,17 @@ def lookml_dimension(
         d["sql_start"] = dimension.sql_start
     if dimension.suggestions:
         d["suggestions"] = dimension.suggestions
-    if d["type"] in looker_date_time_types: # check if is a dimension group
-        d["name"] = d["name"].removesuffix("_at")
-        d["timeframes"] = dimension.timeframes or looker_timeframes
     d = lookml_add_common_properties(dimension, d)
     if d["name"].startswith("pk_"):
         d["primary_key"] = models.LookerBooleanType.yes.value
         d["hidden"] = models.LookerBooleanType.yes.value
     if d["name"].startswith("fk_"):
         d["hidden"] = models.LookerBooleanType.yes.value
+    if d["type"] == "time": # check if is a time dimension group
+        d["name"] = d["name"].removesuffix("_at")
+        d["timeframes"] = dimension.timeframes or looker_timeframes
+    if d["type"] == "duration":
+        d["intervals"] = dimension.intervals or looker_intervals
     return d
 
 
@@ -412,12 +397,15 @@ def lookml_view_from_dbt_model(
     model: models.DbtModel,
     adapter_type: models.SupportedDbtAdapters,
 ):
+    all_dimensions = lookml_dimensions_from_model(model, adapter_type)
+    dimensions = [d for d in all_dimensions if d["type"] in looker_dimension_types]
+    dimension_groups = [d for d in all_dimensions if d["type"] in looker_dimension_group_types]
     lookml = {
         "view": {
             "name": model.name,
             "sql_table_name": model.relation_name,
-            "dimension_groups": lookml_dimension_groups_from_model(model, adapter_type),
-            "dimensions": lookml_dimensions_from_model(model, adapter_type),
+            "dimension_groups": dimension_groups,
+            "dimensions": dimensions,
             "parameters": lookml_parameters_from_model(model),
             "measures": lookml_measures_from_model(model, adapter_type),
         },
